@@ -1,3 +1,15 @@
+/* eslint-disable @typescript-eslint/no-explicit-any --
+ *
+ * Deliberate, and the one place in the repo where `any` is the right answer.
+ *
+ * This script is a BLACK-BOX prober: it asserts on the raw HTTP status codes an
+ * untrusted server returns over the wire. Importing the application's own types to
+ * describe those responses would couple the proof to the implementation it is supposed
+ * to be testing independently — if a refactor changed a response shape, the proof would
+ * stop compiling instead of stopping *passing*, which is exactly backwards. It should
+ * fail the way a real attacker's curl would: at runtime, on the actual bytes.
+ */
+
 /**
  * RBAC PROOF — the brief demands that "a lower-privileged account hitting a restricted
  * endpoint directly must be blocked", not merely that the UI hides the button.

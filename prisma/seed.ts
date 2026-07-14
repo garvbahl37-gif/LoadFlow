@@ -163,9 +163,7 @@ async function main() {
     [],
   );
 
-  const brokerAdmin = await makeUser(broker.id, "Dana Whitfield", "admin@meridian.com", [
-    brokerAdminRole.id,
-  ]);
+  await makeUser(broker.id, "Dana Whitfield", "admin@meridian.com", [brokerAdminRole.id]);
   const dispatcher = await makeUser(broker.id, "Marcus Reyes", "dispatch@meridian.com", [
     dispatcherRole.id,
   ]);
