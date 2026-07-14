@@ -82,9 +82,9 @@ Show **`docs/AI-USAGE.md`** and `git log --oneline`, and say three concrete thin
 
 1. **"Next 16 and Prisma 7 are newer than the model's training. So before writing any code, I sent agents into the bundled `node_modules` docs with one rule: don't answer from memory, cite the file."** That caught a project-ender — *Prisma 7 has no built-in SQLite driver; the app literally could not have connected to its own database.*
 2. **"I wrote the security-critical spine myself — schema, permission guard, state machine — then froze it, wrote the API contract, and fanned out 13 agents in parallel against it."** Disjoint files, one interface, fit together on the first typecheck.
-3. **"Then I reviewed it like a PR from a fast junior."** All 13 agents reported "typecheck clean" — and the app still had a **completely empty audit trail** on delivered loads, a CSP header that silently broke PDF preview, and a login page advertising **two shipper companies that don't exist**. Fluent and unverified. *"A typechecker will never catch an invented company name. Only running it and reading it will."*
+3. **"Then I turned the model on its own finished work — an adversarial audit, six agents told to *break it, not praise it*."** It found a **live compliance bypass** (override a flag for one carrier, re-tender to another, and the gate let it through) and a **password-hash leak** to shippers — none of which failed a typecheck, a lint, or the test suite, and two of which the app's own docs claimed it prevented. *"The model is a capable builder and an even better critic, but only when you point it at the work and tell it to break it."*
 
-Close on: **"Working must-haves, all three stretch goals, and every claim in the README has a test or a curl command behind it."**
+Close on: **"Working must-haves, all three stretch goals, every claim in the README backed by a test or a curl command — and a deployed URL."**
 
 ---
 
