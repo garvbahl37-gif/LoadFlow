@@ -66,6 +66,37 @@ export function handler<Args extends unknown[]>(
   };
 }
 
+/**
+ * CSRF defence for non-JSON mutations.
+ *
+ * Every other mutating endpoint takes `application/json`, which a cross-site HTML form
+ * cannot produce — the browser would have to send a preflight, and CORS refuses it. So
+ * `SameSite=Lax` plus JSON-only is already sufficient there.
+ *
+ * The POD upload is the exception: `multipart/form-data` IS a "simple" content type, so
+ * a malicious page COULD make a logged-in carrier's browser submit one cross-site. This
+ * closes that hole. `Sec-Fetch-Site` is sent by every browser that matters; we fall back
+ * to comparing Origin against Host for anything that does not send it.
+ */
+export function requireSameOrigin(req: Request): void {
+  const site = req.headers.get("sec-fetch-site");
+  if (site) {
+    if (site === "same-origin" || site === "none") return;
+    throw new ApiError(403, "Cross-site requests are not accepted for this endpoint.");
+  }
+
+  const origin = req.headers.get("origin");
+  if (!origin) return; // non-browser client (curl, the RBAC proof) — no ambient cookie risk
+
+  const host = req.headers.get("host");
+  try {
+    if (new URL(origin).host === host) return;
+  } catch {
+    // fall through
+  }
+  throw new ApiError(403, "Cross-site requests are not accepted for this endpoint.");
+}
+
 /** Parse a JSON body with a Zod schema; malformed JSON becomes a 422, not a 500. */
 export async function parseBody<T extends z.ZodType>(req: Request, schema: T): Promise<z.infer<T>> {
   let raw: unknown;

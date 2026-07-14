@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { Conflict, handler, Invalid } from "@/lib/api/http";
+import { Conflict, handler, Invalid, requireSameOrigin } from "@/lib/api/http";
 import { audit, requestMeta } from "@/lib/audit/log";
 import { authorize, loadInScopeOrThrow, requireSession } from "@/lib/authz/guard";
 import { prisma } from "@/lib/db";
@@ -60,6 +60,11 @@ export const GET = handler(async (req: NextRequest, ctx: Ctx) => {
  * cannot reach this write from any angle.
  */
 export const POST = handler(async (req: NextRequest, ctx: Ctx) => {
+  // The only mutation in the app that is not application/json. multipart/form-data is a
+  // "simple" content type, so a cross-site form could otherwise make a signed-in
+  // carrier's browser post one. Every JSON endpoint is already immune to that.
+  requireSameOrigin(req);
+
   const { id } = await ctx.params;
   const meta = requestMeta(req);
   const session = await requireSession();
