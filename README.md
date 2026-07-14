@@ -104,6 +104,22 @@ One repo, one `npm run dev`, no external services — a reviewer can run it in 6
 
 Passwords use Node's built-in `scrypt` rather than bcrypt/argon2: a native addon that fails to compile is the most common way a reviewer's `npm install` dies.
 
+### Configuration
+
+The app reads **one** environment variable:
+
+```bash
+DATABASE_URL="file:./prisma/dev.db"
+```
+
+There are no API keys. No Supabase, no auth provider, no object storage, and — because sessions are database rows rather than signed tokens — not even a session secret. `npm run setup` creates the database file.
+
+### Deploying
+
+It also runs on **Postgres** without a single code change: [`src/lib/db.ts`](src/lib/db.ts) selects its driver from the connection string, and the Postgres schema is *generated* from the SQLite one (`npm run db:sync-postgres`) so the two cannot drift. Set `DATABASE_PROVIDER=postgresql` plus a connection string and it targets Supabase/Neon on Vercel.
+
+This is verified, not asserted: the full HTTP RBAC proof (24/24), the seed, and the POD byte round-trip through `BYTEA` were all re-run against a real Postgres instance. See **[docs/DEPLOY.md](docs/DEPLOY.md)**, which also covers running it as-is on SQLite on any host with a persistent disk, and explains why SQLite cannot work on a serverless filesystem.
+
 ---
 
 ## Documentation
@@ -115,6 +131,7 @@ Passwords use Node's built-in `scrypt` rather than bcrypt/argon2: a native addon
 | **[docs/API.md](docs/API.md)** | The REST contract. |
 | **[docs/AI-USAGE.md](docs/AI-USAGE.md)** | How this was built with an AI coding tool — prompt style, review habits, what it got wrong. |
 | **[docs/CONVENTIONS.md](docs/CONVENTIONS.md)** | Framework ground truth. Next 16 / Prisma 7 / Tailwind 4 all break older muscle memory. |
+| **[docs/DEPLOY.md](docs/DEPLOY.md)** | Deploying on Postgres (verified), or on SQLite with a persistent disk. |
 
 ---
 
