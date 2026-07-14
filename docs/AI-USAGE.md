@@ -89,6 +89,20 @@ AFTER   LF-1043: CARRIER_ASSIGNED | blocking flags: 0
 
 That last line is the one I care about. After the insurance was renewed, the compliance gate **released** — and the *next* guard in the state machine correctly took over. The guards are layered and independently real, not one boolean pretending to be a system. No unit test told me that. Running it did.
 
+## 7. Turn the model on its own work — an adversarial audit
+
+Once the app was passing its own tests and deployed, I ran a second, deliberately hostile pass: six agents, one per section of the brief, told *"find what is broken, missing, or falls short — you are not here to praise it,"* each with a live server to attack over HTTP. A seventh agent then re-verified every finding, because auditors hallucinate too. It found things the build agents and I had missed:
+
+* A **carrier-agnostic compliance override** — the brief's central liability control had a live bypass. Override a flag for one carrier, re-tender the load to a different carrier who breaks the same rule, and it dispatched with no flag at all. The gate *looked* airtight in every demo because the demo never re-tendered.
+* `GET /api/loads/[id]` **leaking broker-staff password hashes** to any in-scope shipper or carrier, via an `include: { createdBy: true }` that pulled every column.
+* The shipper reading the **broker's internal rate negotiation** through the raw API, even though the shipper's *page* correctly hid it — the exact UI-only-enforcement the brief forbids.
+* `POD_VERIFIED` never writing the POD's own `verifiedAt`, so a verified delivery never *showed* verified.
+* Load editing that **worked over `curl` but had no button in the app** — the "U" in CRUD, unreachable by a real user.
+
+None of these fail a typecheck, a lint, or the test suite. Two were things the app's own README and UI *claimed* to prevent. I fixed all seven, and re-ran the same adversarial agents against the changed code — this time asking them not just to confirm the fix but to hunt for regressions the fix might have introduced, because a fix that breaks a happy path is worse than the bug.
+
+The lesson that keeps repeating: **the model is a capable builder and an even more useful critic, but only when you point it at the work with instructions to break it.** "Does this pass?" and "how would you defeat this?" are different questions, and the second one is where the real bugs live.
+
 ---
 
 ## What I'd tell someone doing this next
@@ -98,3 +112,4 @@ That last line is the one I care about. After the insurance was renewed, the com
 3. **Name the failure mode in the prompt.** "Return 404, not 403, and here's why" produces better code than "implement the endpoint."
 4. **Make it prove things.** Grep-tests and HTTP-level proofs beat prose assurances, in a README and in your own head.
 5. **Look at the output.** The bugs that survive typecheck, lint and tests are the ones you can only find by running the app and reading what it actually says.
+6. **Audit your own work adversarially, with a separate pass.** "Find what's broken" pointed at a running server catches what "build this" never will — including the things your own docs claim you got right.
