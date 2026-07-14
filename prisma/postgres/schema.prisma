@@ -1,0 +1,453 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// GENERATED FILE — DO NOT EDIT.
+//
+// Derived from prisma/schema.prisma by `npm run db:sync-postgres`.
+// The only difference is the datasource provider: SQLite for local development,
+// Postgres for deployment. Edit the SQLite schema and re-run the script.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// LoadFlow — freight brokerage operations suite
+// See docs/ARCHITECTURE.md for the domain contract this schema implements.
+//
+// The datasource carries no `url`: it comes from prisma.config.ts (CLI) and from
+// the driver adapter in src/lib/db.ts (runtime).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────
+
+enum OrgType {
+  BROKER
+  CARRIER
+  SHIPPER
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum AuthorityStatus {
+  ACTIVE
+  PENDING
+  INACTIVE
+  REVOKED
+}
+
+/// The load lifecycle. Transitions are governed by src/lib/loads/state-machine.ts —
+/// nothing may change a load's status except through that table.
+enum LoadStatus {
+  POSTED
+  CARRIER_ASSIGNED
+  RATE_CONFIRMED
+  DISPATCHED
+  IN_TRANSIT
+  DELIVERED
+  POD_VERIFIED
+  INVOICED
+  CLOSED
+  CANCELLED
+}
+
+/// Whether the assigned carrier has accepted the tender.
+enum CarrierResponse {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum RateStatus {
+  CONFIRMED
+  SUPERSEDED
+}
+
+enum FlagStatus {
+  OPEN
+  RESOLVED
+  OVERRIDDEN
+}
+
+/// Only BLOCKING flags stop the state machine. WARNING flags drive expiry alerts.
+enum FlagSeverity {
+  BLOCKING
+  WARNING
+}
+
+enum AuditOutcome {
+  ALLOWED
+  DENIED
+}
+
+// ─────────────────────────────────────────────────────────────
+// Identity, orgs, RBAC
+// ─────────────────────────────────────────────────────────────
+
+model Org {
+  id           String   @id @default(cuid())
+  type         OrgType
+  name         String
+  contactEmail String
+  phone        String?
+  /// Carrier-only identifiers, mirrored onto the compliance record.
+  mcNumber     String?
+  dotNumber    String?
+  city         String?
+  state        String?
+  createdAt    DateTime @default(now())
+
+  users      User[]
+  roles      Role[]
+  invites    Invite[]
+  compliance CarrierCompliance?
+
+  loadsAsShipper Load[] @relation("ShipperLoads")
+  loadsAsBroker  Load[] @relation("BrokerLoads")
+  loadsAsCarrier Load[] @relation("CarrierLoads")
+
+  auditLogs AuditLog[]
+
+  @@index([type])
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String
+  passwordHash String
+  status       UserStatus @default(ACTIVE)
+  orgId        String
+  org          Org        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+
+  roles     UserRole[]
+  sessions  Session[]
+  auditLogs AuditLog[] @relation("AuditActor")
+
+  invitesSent     Invite[]            @relation("InviteSender")
+  rolesAssigned   UserRole[]          @relation("RoleAssigner")
+  loadsCreated    Load[]              @relation("LoadCreator")
+  ratesCreated    RateConfirmation[]  @relation("RateCreator")
+  flagsOverridden ComplianceFlag[]    @relation("FlagOverrider")
+  podsUploaded    ProofOfDelivery[]   @relation("PodUploader")
+  podsVerified    ProofOfDelivery[]   @relation("PodVerifier")
+  complianceEdits CarrierCompliance[] @relation("ComplianceEditor")
+
+  @@index([orgId])
+}
+
+/// A permission is a fixed capability key. The catalog is defined in
+/// src/lib/authz/permissions.ts and mirrored into this table by the seed,
+/// which gives RolePermission referential integrity. Code is the source of truth.
+model Permission {
+  key         String  @id
+  label       String
+  description String
+  category    String
+  forBroker   Boolean @default(false)
+  forCarrier  Boolean @default(false)
+  sortOrder   Int     @default(0)
+
+  roles RolePermission[]
+}
+
+/// An admin-authored bundle of permissions, owned by exactly one org.
+/// Role NAMES are never read by authorization code — only their permissions are.
+model Role {
+  id          String   @id @default(cuid())
+  orgId       String
+  org         Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  /// True for the auto-created "Organization Administrator" role. Undeletable,
+  /// and its permission set is not editable — but it is NOT special-cased in any
+  /// authorization check. It is simply a role that happens to hold every permission.
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  permissions RolePermission[]
+  users       UserRole[]
+  invites     InviteRole[]
+
+  @@unique([orgId, name])
+  @@index([orgId])
+}
+
+model RolePermission {
+  roleId        String
+  role          Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionKey String
+  permission    Permission @relation(fields: [permissionKey], references: [key], onDelete: Cascade)
+
+  @@id([roleId, permissionKey])
+  @@index([permissionKey])
+}
+
+/// Users may hold multiple roles; effective permissions are the union.
+model UserRole {
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId       String
+  role         Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  assignedAt   DateTime @default(now())
+  assignedById String?
+  assignedBy   User?    @relation("RoleAssigner", fields: [assignedById], references: [id])
+
+  @@id([userId, roleId])
+  @@index([roleId])
+}
+
+/// Staff cannot self-signup. An admin with staff.manage issues an invite; the
+/// invitee sets a password at /invite/<token> and lands in the org with exactly
+/// the roles pinned to the invite.
+model Invite {
+  id         String    @id @default(cuid())
+  orgId      String
+  org        Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  email      String
+  name       String
+  token      String    @unique
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  invitedById String
+  invitedBy   User   @relation("InviteSender", fields: [invitedById], references: [id])
+
+  roles InviteRole[]
+
+  @@index([orgId])
+  @@index([email])
+}
+
+model InviteRole {
+  inviteId String
+  invite   Invite @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  roleId   String
+  role     Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([inviteId, roleId])
+}
+
+/// DB-backed sessions: revoking a user or editing a role takes effect on the next
+/// request, which a stateless JWT could not guarantee.
+model Session {
+  id        String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  ip        String?
+  userAgent String?
+
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Compliance
+// ─────────────────────────────────────────────────────────────
+
+model CarrierCompliance {
+  id    String @id @default(cuid())
+  orgId String @unique
+  org   Org    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  insuranceProvider     String
+  insurancePolicyNumber String
+  insuranceExpiry       DateTime
+  /// Cargo coverage in cents; compared against a load's declared value.
+  cargoInsuranceCents   Int
+  autoLiabilityCents    Int
+
+  mcNumber        String
+  dotNumber       String
+  authorityStatus AuthorityStatus @default(ACTIVE)
+
+  /// JSON string arrays (SQLite has no scalar lists). Parsed with Zod at the boundary.
+  approvedEquipment   Json
+  approvedCommodities Json
+
+  notes       String?
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+  updatedBy   User?    @relation("ComplianceEditor", fields: [updatedById], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Loads
+// ─────────────────────────────────────────────────────────────
+
+model Load {
+  id        String @id @default(cuid())
+  reference String @unique
+
+  shipperOrgId String
+  shipperOrg   Org     @relation("ShipperLoads", fields: [shipperOrgId], references: [id])
+  brokerOrgId  String
+  brokerOrg    Org     @relation("BrokerLoads", fields: [brokerOrgId], references: [id])
+  carrierOrgId String?
+  carrierOrg   Org?    @relation("CarrierLoads", fields: [carrierOrgId], references: [id])
+
+  status          LoadStatus      @default(POSTED)
+  carrierResponse CarrierResponse @default(PENDING)
+
+  originCity  String
+  originState String
+  destCity    String
+  destState   String
+  pickupAt    DateTime
+  deliverBy   DateTime
+
+  commodity          String
+  equipmentType      String
+  weightLbs          Int
+  declaredValueCents Int
+  offeredRateCents   Int
+
+  /// The rate version that was ACTUALLY confirmed for this load. Frozen at dispatch,
+  /// so historical loads keep their agreement even as newer versions exist elsewhere.
+  confirmedRateConfirmationId String?           @unique
+  confirmedRate               RateConfirmation? @relation("ConfirmedRate", fields: [confirmedRateConfirmationId], references: [id])
+
+  notes       String?
+  createdById String
+  createdBy   User     @relation("LoadCreator", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  rateConfirmations RateConfirmation[] @relation("LoadRates")
+  complianceFlags   ComplianceFlag[]
+  pods              ProofOfDelivery[]
+  auditLogs         AuditLog[]
+
+  @@index([brokerOrgId, status])
+  @@index([carrierOrgId, status])
+  @@index([shipperOrgId, status])
+}
+
+/// Immutable once written. A new negotiation creates version N+1 and supersedes N.
+model RateConfirmation {
+  id      String @id @default(cuid())
+  loadId  String
+  load    Load   @relation("LoadRates", fields: [loadId], references: [id], onDelete: Cascade)
+  version Int
+
+  baseRateCents  Int
+  /// [{ code, label, amountCents }] — SQLite has no scalar lists.
+  accessorials   Json
+  totalRateCents Int
+
+  status       RateStatus @default(CONFIRMED)
+  carrierOrgId String
+  notes        String?
+
+  createdById String
+  createdBy   User     @relation("RateCreator", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  confirmedFor Load? @relation("ConfirmedRate")
+
+  @@unique([loadId, version])
+  @@index([loadId])
+}
+
+/// An OPEN + BLOCKING flag stops the load at CARRIER_ASSIGNED. The only ways past are
+/// fixing the carrier's compliance record, or an on-the-record override.
+model ComplianceFlag {
+  id           String       @id @default(cuid())
+  loadId       String
+  load         Load         @relation(fields: [loadId], references: [id], onDelete: Cascade)
+  carrierOrgId String
+  code         String
+  severity     FlagSeverity @default(BLOCKING)
+  message      String
+  status       FlagStatus   @default(OPEN)
+
+  raisedAt   DateTime  @default(now())
+  resolvedAt DateTime?
+
+  overriddenById String?
+  overriddenBy   User?     @relation("FlagOverrider", fields: [overriddenById], references: [id])
+  overrideReason String?
+  overriddenAt   DateTime?
+
+  @@index([loadId, status])
+  @@index([carrierOrgId])
+}
+
+model ProofOfDelivery {
+  id        String @id @default(cuid())
+  loadId    String
+  load      Load   @relation(fields: [loadId], references: [id], onDelete: Cascade)
+  fileName  String
+  mimeType  String
+  sizeBytes Int
+  /// Bytes live in SQLite so the whole app stays one portable file — no blob store,
+  /// no writable-filesystem assumption on the host.
+  data      Bytes
+
+  notes        String?
+  uploadedById String
+  uploadedBy   User     @relation("PodUploader", fields: [uploadedById], references: [id])
+  uploadedAt   DateTime @default(now())
+
+  verifiedById String?
+  verifiedBy   User?     @relation("PodVerifier", fields: [verifiedById], references: [id])
+  verifiedAt   DateTime?
+
+  @@index([loadId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Audit — one spine for business events AND permission denials
+// ─────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id String   @id @default(cuid())
+  ts DateTime @default(now())
+
+  actorUserId String?
+  actorUser   User?   @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  /// Denormalized so the trail survives the actor being deleted.
+  actorEmail  String?
+  actorName   String?
+
+  actorOrgId String?
+  actorOrg   Org?    @relation(fields: [actorOrgId], references: [id], onDelete: SetNull)
+
+  action     String
+  entityType String
+  entityId   String?
+
+  loadId String?
+  load   Load?   @relation(fields: [loadId], references: [id], onDelete: Cascade)
+
+  /// DENIED rows are the permission-denied log. They are queryable in the audit
+  /// viewer, not merely printed to a console.
+  outcome    AuditOutcome @default(ALLOWED)
+  permission String?
+
+  fromStatus String?
+  toStatus   String?
+
+  summary String
+  detail  Json?
+
+  ip     String?
+  method String?
+  path   String?
+
+  @@index([loadId, ts])
+  @@index([actorOrgId, ts])
+  @@index([outcome, ts])
+}
