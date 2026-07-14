@@ -93,8 +93,8 @@ export const DEMO_GROUPS: Group[] = [
     org: "Shippers",
     kind: "Shipper",
     accounts: [
-      { email: "shipper@cascade.com", role: "Cascade Manufacturing", note: "No roles, no permissions — pure object-level scoping. Sees only its own freight." },
-      { email: "shipper@northgate.com", role: "Northgate Foods", note: "Read-only view of its own loads. Cannot see Cascade's." },
+      { email: "shipper@cascade.com", role: "Cascade Produce Co.", note: "No roles, no permissions — pure object-level scoping. Sees only its own freight." },
+      { email: "shipper@northgate.com", role: "Northgate Building Supply", note: "Read-only view of its own loads. Cannot see Cascade's." },
     ],
   },
 ];
