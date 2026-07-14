@@ -35,8 +35,27 @@ export const GET = handler(async (req: NextRequest, ctx: Ctx) => {
       mimeType: true,
       sizeBytes: true,
       data: true,
+      verifiedAt: true,
+      load: { select: { status: true } },
     },
   });
+
+  // A shipper is shown a POD only once the broker has VERIFIED it — the app promises them
+  // "we will not show it to you as proof until your broker has verified it." Enforce that
+  // at the API, not just in the shipper's page: an unverified POD is 404 for a shipper.
+  if (pod && session.orgType === "SHIPPER" && pod.verifiedAt === null) {
+    await audit({
+      actor: session,
+      action: "SCOPE_DENIED",
+      entityType: "ProofOfDelivery",
+      entityId: podId,
+      outcome: "DENIED",
+      summary: `Blocked: ${session.email} requested an unverified proof of delivery; PODs are released to shippers only after the broker verifies them.`,
+      detail: { reason: "POD_NOT_VERIFIED", loadStatus: pod.load.status },
+      meta,
+    });
+    throw NotFound("Proof of delivery");
+  }
 
   if (!pod) {
     await audit({
