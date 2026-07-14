@@ -33,9 +33,13 @@ export function AuditFilters({
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep the box in sync when the URL changes underneath us (back button, Clear).
-  useEffect(() => {
+  // Adjusting state during render rather than in an effect: no wasted render pass with
+  // the stale value, and no synchronous setState inside an effect.
+  const [lastQ, setLastQ] = useState(query.q);
+  if (query.q !== lastQ) {
+    setLastQ(query.q);
     setText(query.q);
-  }, [query.q]);
+  }
 
   function push(mutate: (params: URLSearchParams) => void) {
     const params = new URLSearchParams(searchParams.toString());

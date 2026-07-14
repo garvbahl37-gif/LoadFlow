@@ -3,11 +3,36 @@ import { Badge } from "@/components/ui";
 import { fullDate, lane, money, relative, weight } from "@/lib/format";
 
 /**
+ * Exactly what this component reads — nothing more. Typed structurally rather than as
+ * the Prisma model so any caller with these fields can use it, but an `any` here would
+ * silently render "$NaN" the moment a caller forgot one.
+ */
+export type LoadSummaryData = {
+  reference: string;
+  originCity: string;
+  originState: string;
+  destCity: string;
+  destState: string;
+  pickupAt: Date | string;
+  deliverBy: Date | string;
+  equipmentType: string;
+  commodity: string;
+  weightLbs: number;
+  declaredValueCents: number;
+  offeredRateCents: number;
+  carrierResponse?: string | null;
+  notes?: string | null;
+  shipperOrg?: { name: string } | null;
+  carrierOrg?: { name: string } | null;
+  confirmedRate?: { totalRateCents: number; version: number } | null;
+};
+
+/**
  * The load, at a glance. Dense on purpose: an ops desk reads this in two seconds and
  * moves on. Anything that could raise a compliance flag (equipment, commodity, declared
  * value) is here, because those are the fields the gate actually reasons about.
  */
-export function LoadSummary({ load }: { load: any }) {
+export function LoadSummary({ load }: { load: LoadSummaryData }) {
   const carrier = load.carrierOrg;
   const response: string | null = load.carrierResponse ?? null;
 

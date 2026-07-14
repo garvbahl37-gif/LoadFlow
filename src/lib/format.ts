@@ -70,6 +70,11 @@ export function relative(d: Date | string): string {
   return days < 0 ? `${-days} days ago` : `in ${days} days`;
 }
 
+/** Is this moment in the past? Lives here so callers don't call Date.now() in render. */
+export function isPast(d: Date | string): boolean {
+  return new Date(d).getTime() < Date.now();
+}
+
 export function daysUntil(d: Date | string): number {
   return Math.floor((new Date(d).getTime() - Date.now()) / 86_400_000);
 }

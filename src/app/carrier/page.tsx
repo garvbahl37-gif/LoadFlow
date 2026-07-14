@@ -16,7 +16,7 @@ import {
 import { getSession } from "@/lib/auth/session";
 import { can, loadScope } from "@/lib/authz/guard";
 import { prisma } from "@/lib/db";
-import { money, relative } from "@/lib/format";
+import { isPast, money, relative } from "@/lib/format";
 import { STATUS_LABEL } from "@/lib/loads/state-machine";
 
 /**
@@ -108,7 +108,7 @@ export default async function CarrierLoadsPage() {
   const canRespond = can(session, "load.accept_decline");
   const canManageCompliance = can(session, "compliance.manage");
 
-  const insuranceLapsed = compliance ? compliance.insuranceExpiry.getTime() < Date.now() : true;
+  const insuranceLapsed = compliance ? isPast(compliance.insuranceExpiry) : true;
   const authorityBad = compliance ? compliance.authorityStatus !== "ACTIVE" : true;
 
   /** What is this carrier expected to do next on this load — or who are they waiting on? */

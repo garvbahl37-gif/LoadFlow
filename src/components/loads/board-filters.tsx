@@ -33,7 +33,15 @@ export function BoardFilters({
   const [pending, startTransition] = useTransition();
   const [term, setTerm] = useState(q);
 
-  useEffect(() => setTerm(q), [q]);
+  // The URL is the source of truth; the input is a local draft of it. When the URL
+  // changes underneath us (back button, Clear), re-sync the draft. React sanctions
+  // adjusting state during render for exactly this — it is cheaper and more correct
+  // than an effect, which would render once with the stale value first.
+  const [lastQ, setLastQ] = useState(q);
+  if (q !== lastQ) {
+    setLastQ(q);
+    setTerm(q);
+  }
 
   function push(next: Partial<Record<string, string | null>>) {
     const params = new URLSearchParams();

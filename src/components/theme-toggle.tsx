@@ -1,19 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
-/** Theme lives in localStorage; the no-flash script in the root layout applies it
-    before paint, so this component only has to keep the two in sync. */
+/**
+ * The theme lives on <html class="dark">, applied before paint by the no-flash script
+ * in the root layout. The DOM is therefore the source of truth — not React state.
+ *
+ * Reading it with useSyncExternalStore rather than a useState/useEffect pair avoids a
+ * synchronous setState inside an effect (which triggers a second render pass) and keeps
+ * the button in sync even if something else on the page flips the class.
+ */
+function subscribe(onChange: () => void): () => void {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["class"],
+  });
+  return () => observer.disconnect();
+}
+
+const isDark = () => document.documentElement.classList.contains("dark");
+
 export function ThemeToggle() {
-  const [dark, setDark] = useState(true);
-
-  useEffect(() => {
-    setDark(document.documentElement.classList.contains("dark"));
-  }, []);
+  // Server snapshot is `true`: the layout renders <html> with `dark` by default.
+  const dark = useSyncExternalStore(subscribe, isDark, () => true);
 
   function toggle() {
-    const next = !dark;
-    setDark(next);
+    const next = !isDark();
     document.documentElement.classList.toggle("dark", next);
     try {
       localStorage.setItem("lf-theme", next ? "dark" : "light");
