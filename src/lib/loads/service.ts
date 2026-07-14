@@ -13,15 +13,20 @@ import {
   type TransitionFacts,
 } from "@/lib/loads/state-machine";
 
+// Never `include: { createdBy: true }` on a User relation: that pulls EVERY column,
+// including passwordHash, status and lastLoginAt, into a response an in-scope shipper or
+// carrier can read. Only ever select the three fields a counterparty is allowed to see.
+const PUBLIC_USER = { select: { id: true, name: true, email: true } } as const;
+
 const LOAD_DETAIL_INCLUDE = {
   shipperOrg: true,
   brokerOrg: true,
   carrierOrg: true,
   complianceFlags: { orderBy: { raisedAt: "desc" } },
-  rateConfirmations: { orderBy: { version: "desc" }, include: { createdBy: true } },
+  rateConfirmations: { orderBy: { version: "desc" }, include: { createdBy: PUBLIC_USER } },
   confirmedRate: true,
   pods: { orderBy: { uploadedAt: "desc" }, select: PodMeta() },
-  createdBy: { select: { id: true, name: true, email: true } },
+  createdBy: PUBLIC_USER,
 } as const;
 
 function PodMeta() {
@@ -40,6 +45,29 @@ function PodMeta() {
 }
 
 export { LOAD_DETAIL_INCLUDE };
+
+/**
+ * A shipper is not a party to the broker↔carrier agreement. The brief limits them to
+ * "their own load status and delivery confirmation", so the API must not hand them the
+ * rate negotiation (versions, base rates, accessorials, internal notes), the broker's
+ * offered rate, or the compliance flags on their carrier — even though the load is in
+ * their scope. The shipper's own page already hides all of this; this makes the raw JSON
+ * endpoint enforce the same boundary, rather than leaving it to UI hiding.
+ *
+ * Everything a shipper legitimately needs — status, lane, dates, commodity, who is
+ * hauling it, their own declared value, and POD metadata — is preserved.
+ */
+export function redactForShipper<T extends Record<string, unknown>>(load: T): T {
+  const {
+    rateConfirmations: _rates,
+    confirmedRate: _confirmed,
+    complianceFlags: _flags,
+    offeredRateCents: _offered,
+    confirmedRateConfirmationId: _confirmedId,
+    ...safe
+  } = load;
+  return safe as unknown as T;
+}
 
 /** Assemble the facts the state machine is allowed to reason about. */
 export async function factsFor(loadId: string): Promise<TransitionFacts> {
@@ -124,6 +152,17 @@ export async function transitionLoad(
     where: { id: loadId },
     data: { status: to },
   });
+
+  // Verifying a POD is its own attributed event — WHO attested to THIS document, and
+  // WHEN. The load-status change records that the load reached POD_VERIFIED; this records
+  // it on the document itself, which is what the shipper's delivery confirmation and the
+  // POD viewers read to show a verified badge. The guard already proved a POD exists.
+  if (to === "POD_VERIFIED") {
+    await prisma.proofOfDelivery.updateMany({
+      where: { loadId, verifiedAt: null },
+      data: { verifiedById: session.userId, verifiedAt: new Date() },
+    });
+  }
 
   await audit({
     actor: session,
@@ -236,10 +275,13 @@ export async function respondToTender(
   }
 
   // Declining returns the load to the board and detaches the carrier entirely —
-  // including its compliance flags, which were about *that* carrier, not this load.
+  // including EVERY compliance flag about that carrier, whatever its status. These flags
+  // (and any override on them) were decisions about *that* carrier; leaving an OVERRIDDEN
+  // one behind would let it wrongly suppress the same rule when the load is re-tendered to
+  // a different carrier. Not just the OPEN ones — all of them.
   await prisma.$transaction([
     prisma.complianceFlag.deleteMany({
-      where: { loadId, carrierOrgId: session.orgId, status: "OPEN" },
+      where: { loadId, carrierOrgId: session.orgId },
     }),
     prisma.load.update({
       where: { id: loadId },
