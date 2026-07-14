@@ -178,16 +178,26 @@ export async function evaluateLoad(
   const findingByCode = new Map(findings.map((f) => [f.code, f]));
 
   const existingOpen = load.complianceFlags.filter((f) => f.status === "OPEN");
-  const overriddenCodes = new Set(
-    load.complianceFlags.filter((f) => f.status === "OVERRIDDEN").map((f) => f.code),
+
+  // An override is a documented decision about ONE carrier — "I accept that THIS carrier
+  // has this specific problem". It must never suppress the same rule for a DIFFERENT
+  // carrier, or a broker who overrode a commodity flag for carrier A, then re-tendered to
+  // carrier B who violates the identical rule, would dispatch B fully non-compliant with
+  // no flag at all. So the suppression key is (code, carrierOrgId), never code alone.
+  const overriddenKeys = new Set(
+    load.complianceFlags
+      .filter((f) => f.status === "OVERRIDDEN")
+      .map((f) => `${f.carrierOrgId}:${f.code}`),
   );
+  const isOverridden = (code: string) => overriddenKeys.has(`${load.carrierOrgId}:${code}`);
 
   const raised: Finding[] = [];
   const resolved: FlagCode[] = [];
 
-  // Raise anything newly wrong that isn't already open and wasn't consciously overridden.
+  // Raise anything newly wrong that isn't already open and wasn't consciously overridden
+  // for THIS carrier.
   for (const finding of findings) {
-    if (overriddenCodes.has(finding.code)) continue;
+    if (isOverridden(finding.code)) continue;
     if (existingOpen.some((f) => f.code === finding.code)) continue;
 
     await prisma.complianceFlag.create({
