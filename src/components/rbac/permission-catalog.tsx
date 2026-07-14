@@ -213,26 +213,29 @@ export function CatalogReference({
             <ul className="space-y-2.5">
               {group.permissions.map((p) => {
                 const granting = roles.filter((r) => r.permissionKeys.includes(p.key));
+                // Stacked, not side-by-side: in a narrow rail, floating the granting
+                // roles to the right squeezes the description into a ragged column.
                 return (
-                  <li key={p.key} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-baseline gap-x-2">
-                        <span className="text-[13px] font-medium text-ink">{p.label}</span>
-                        <code className="rounded-xs bg-surface-2 px-1 font-mono text-[11px] text-ink-3">
-                          {p.key}
-                        </code>
-                      </div>
-                      <p className="mt-0.5 text-[12px] leading-snug text-ink-3">{p.description}</p>
+                  <li key={p.key} className="min-w-0">
+                    <div className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="text-[13px] font-medium text-ink">{p.label}</span>
+                      <code className="rounded-xs bg-surface-2 px-1 font-mono text-[11px] text-ink-3">
+                        {p.key}
+                      </code>
                     </div>
-                    <div className="shrink-0 text-right">
+                    <p className="mt-0.5 text-[12px] leading-snug text-ink-3">{p.description}</p>
+                    <p className="mt-1 text-[11px] text-ink-3">
                       {granting.length === 0 ? (
-                        <span className="text-[11px] text-ink-3">granted by no role</span>
+                        <span className="text-warn">Granted by no role</span>
                       ) : (
-                        <span className="text-[11px] text-ink-2">
-                          {granting.map((r) => r.name).join(", ")}
-                        </span>
+                        <>
+                          <span className="text-ink-3">Held by </span>
+                          <span className="text-ink-2">
+                            {granting.map((r) => r.name).join(" · ")}
+                          </span>
+                        </>
                       )}
-                    </div>
+                    </p>
                   </li>
                 );
               })}

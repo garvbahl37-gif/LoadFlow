@@ -163,7 +163,7 @@ export function RbacConsole({ orgName }: { orgName: string }) {
       {loading ? (
         <LoadingState />
       ) : tab === "roles" ? (
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_440px]">
           <RolesPanel roles={roles} catalog={catalog} onChanged={refresh} />
           <CatalogReference catalog={catalog} roles={roles} />
         </div>
