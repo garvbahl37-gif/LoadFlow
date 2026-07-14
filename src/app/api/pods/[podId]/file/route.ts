@@ -55,6 +55,16 @@ export const GET = handler(async (req: NextRequest, ctx: Ctx) => {
   const body = new Uint8Array(pod.data);
   const filename = pod.fileName.replace(/["\r\n]/g, "");
 
+  // A `sandbox` directive stops the browser's built-in PDF viewer from rendering the
+  // document at all, so an embedded POD shows as a blank frame. Images get the strict
+  // policy; PDFs get one that still forbids scripts and subresources but permits the
+  // viewer to run. `nosniff` plus the upload-time MIME allowlist (png/jpeg/webp/pdf)
+  // is what actually prevents this route from serving something executable.
+  const isPdf = pod.mimeType === "application/pdf";
+  const csp = isPdf
+    ? "default-src 'none'; object-src 'self'; plugin-types application/pdf"
+    : "default-src 'none'; img-src 'self'; object-src 'none'; sandbox";
+
   return new Response(body, {
     status: 200,
     headers: {
@@ -65,7 +75,7 @@ export const GET = handler(async (req: NextRequest, ctx: Ctx) => {
       // keep them out of shared caches and off intermediary disks.
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
-      "Content-Security-Policy": "default-src 'none'; img-src 'self'; object-src 'none'; sandbox",
+      "Content-Security-Policy": csp,
     },
   });
 });

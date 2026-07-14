@@ -82,15 +82,26 @@ export function PodViewer({ pods }: { pods: ViewerPod[] }) {
                   className="max-h-[420px] w-full bg-white object-contain"
                 />
               ) : isPdf ? (
+                // Browsers without a built-in PDF viewer fall back to the <object>'s
+                // children. Make that fallback a proper document card rather than a
+                // blank frame — it should read as "here is your document", not "broken".
                 <object
                   data={href}
                   type="application/pdf"
                   className="h-[420px] w-full"
                   aria-label={`Proof of delivery — ${pod.fileName}`}
                 >
-                  <div className="px-4 py-8 text-center text-[13px] text-ink-3">
-                    This browser will not preview the PDF inline. Open it in a new tab
-                    below.
+                  <div className="flex flex-col items-center justify-center gap-2 px-4 py-12 text-center">
+                    <svg viewBox="0 0 24 24" className="h-9 w-9 text-ink-3" aria-hidden>
+                      <path
+                        d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7l-5-5Zm0 2 4 4h-4V4Z"
+                        className="fill-current"
+                      />
+                    </svg>
+                    <p className="text-[13px] font-medium text-ink-2">{pod.fileName}</p>
+                    <p className="text-[12px] text-ink-3">
+                      Your browser has no built-in PDF viewer. Open the document below.
+                    </p>
                   </div>
                 </object>
               ) : (
