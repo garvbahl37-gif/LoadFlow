@@ -129,9 +129,18 @@ export default async function LoadDetailPage({
             Posted by {load.createdBy?.name ?? "—"} · {dateTime(load.createdAt)}
           </p>
         </div>
-        <Link href="/broker">
-          <Button variant="ghost">Back to the board</Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          {/* Edit is offered only while the load is still editable and only to holders of
+              load.create. The edit page and PATCH /api/loads/[id] both re-check this. */}
+          {can(session, "load.create") && ["POSTED", "CARRIER_ASSIGNED"].includes(load.status) ? (
+            <Link href={`/broker/loads/${load.id}/edit`}>
+              <Button variant="secondary">Edit load</Button>
+            </Link>
+          ) : null}
+          <Link href="/broker">
+            <Button variant="ghost">Back to the board</Button>
+          </Link>
+        </div>
       </div>
 
       <div className="mb-5 space-y-3">

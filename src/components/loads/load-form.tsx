@@ -14,28 +14,57 @@ import { COMMODITY_TYPES, dollarsToCents, EQUIPMENT_TYPES, isoDate, money } from
 
 type Shipper = { id: string; name: string; city: string | null; state: string | null };
 
+/** The subset of a load this form edits. Money is in cents (DB units) here. */
+export type EditableLoad = {
+  id: string;
+  reference: string;
+  shipperOrgId: string;
+  originCity: string;
+  originState: string;
+  destCity: string;
+  destState: string;
+  pickupAt: Date | string;
+  deliverBy: Date | string;
+  commodity: string;
+  equipmentType: string;
+  weightLbs: number;
+  declaredValueCents: number;
+  offeredRateCents: number;
+  notes: string | null;
+};
+
 const inDays = (n: number) => isoDate(new Date(Date.now() + n * 86_400_000));
 
-export function LoadForm({ shippers }: { shippers: Shipper[] }) {
+/**
+ * Post a new load, or edit an existing one. `brokerOrgId`, `createdById` and `reference`
+ * are never in this form: the API derives the first two from the session and generates
+ * the third. A field the client could forge is a field the client should not send.
+ *
+ * In edit mode it PATCHes /api/loads/[id]; the shipper cannot be changed (a load belongs
+ * to its shipper), and if equipment/commodity/declared value change the API re-runs the
+ * compliance evaluator, which the detail page reflects on return.
+ */
+export function LoadForm({ shippers, load }: { shippers: Shipper[]; load?: EditableLoad }) {
   const router = useRouter();
+  const editing = !!load;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   const [form, setForm] = useState({
-    shipperOrgId: shippers[0]?.id ?? "",
-    originCity: "",
-    originState: "",
-    destCity: "",
-    destState: "",
-    pickupAt: inDays(2),
-    deliverBy: inDays(4),
-    commodity: COMMODITY_TYPES[0] as string,
-    equipmentType: EQUIPMENT_TYPES[0] as string,
-    weightLbs: "",
-    declaredValue: "",
-    offeredRate: "",
-    notes: "",
+    shipperOrgId: load?.shipperOrgId ?? shippers[0]?.id ?? "",
+    originCity: load?.originCity ?? "",
+    originState: load?.originState ?? "",
+    destCity: load?.destCity ?? "",
+    destState: load?.destState ?? "",
+    pickupAt: load ? isoDate(load.pickupAt) : inDays(2),
+    deliverBy: load ? isoDate(load.deliverBy) : inDays(4),
+    commodity: load?.commodity ?? (COMMODITY_TYPES[0] as string),
+    equipmentType: load?.equipmentType ?? (EQUIPMENT_TYPES[0] as string),
+    weightLbs: load ? String(load.weightLbs) : "",
+    declaredValue: load ? (load.declaredValueCents / 100).toFixed(2) : "",
+    offeredRate: load ? (load.offeredRateCents / 100).toFixed(2) : "",
+    notes: load?.notes ?? "",
   });
 
   function set<K extends keyof typeof form>(key: K, value: string) {
@@ -50,40 +79,43 @@ export function LoadForm({ shippers }: { shippers: Shipper[] }) {
     setError(null);
     setFieldErrors({});
 
+    const payload = {
+      // shipperOrgId is only sent when creating — a load cannot change hands.
+      ...(editing ? {} : { shipperOrgId: form.shipperOrgId }),
+      originCity: form.originCity.trim(),
+      originState: form.originState.trim().toUpperCase(),
+      destCity: form.destCity.trim(),
+      destState: form.destState.trim().toUpperCase(),
+      pickupAt: new Date(`${form.pickupAt}T12:00:00`).toISOString(),
+      deliverBy: new Date(`${form.deliverBy}T12:00:00`).toISOString(),
+      commodity: form.commodity,
+      equipmentType: form.equipmentType,
+      weightLbs: Number.parseInt(form.weightLbs || "0", 10),
+      declaredValueCents: dollarsToCents(form.declaredValue || "0"),
+      offeredRateCents: dollarsToCents(form.offeredRate || "0"),
+      notes: form.notes.trim() || (editing ? null : undefined),
+    };
+
     try {
-      const res = await fetch("/api/loads", {
-        method: "POST",
+      const res = await fetch(editing ? `/api/loads/${load.id}` : "/api/loads", {
+        method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          shipperOrgId: form.shipperOrgId,
-          originCity: form.originCity.trim(),
-          originState: form.originState.trim().toUpperCase(),
-          destCity: form.destCity.trim(),
-          destState: form.destState.trim().toUpperCase(),
-          pickupAt: new Date(`${form.pickupAt}T12:00:00`).toISOString(),
-          deliverBy: new Date(`${form.deliverBy}T12:00:00`).toISOString(),
-          commodity: form.commodity,
-          equipmentType: form.equipmentType,
-          weightLbs: Number.parseInt(form.weightLbs || "0", 10),
-          declaredValueCents: dollarsToCents(form.declaredValue || "0"),
-          offeredRateCents: dollarsToCents(form.offeredRate || "0"),
-          ...(form.notes.trim() ? { notes: form.notes.trim() } : {}),
-        }),
+        body: JSON.stringify(payload),
       });
 
       const json = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setError(json?.error ?? `Could not post the load (${res.status}).`);
+        setError(json?.error ?? `Could not ${editing ? "save" : "post"} the load (${res.status}).`);
         setFieldErrors(json?.detail?.fieldErrors ?? json?.fieldErrors ?? {});
         setPending(false);
         return;
       }
 
-      router.push(`/broker/loads/${json.load.id}`);
+      router.push(`/broker/loads/${editing ? load.id : json.load.id}`);
       router.refresh();
     } catch {
-      setError("Network error — the load was not posted.");
+      setError(`Network error — the load was not ${editing ? "saved" : "posted"}.`);
       setPending(false);
     }
   }
@@ -106,26 +138,42 @@ export function LoadForm({ shippers }: { shippers: Shipper[] }) {
     <form onSubmit={submit}>
       <Card>
         <CardHeader
-          title="Load details"
-          subtitle="Equipment, commodity and declared value are what the compliance gate reasons about when you tender."
+          title={editing ? `Edit load ${load.reference}` : "Load details"}
+          subtitle={
+            editing
+              ? "Changing equipment, commodity or declared value re-runs the compliance check against the assigned carrier."
+              : "Equipment, commodity and declared value are what the compliance gate reasons about when you tender."
+          }
         />
 
         <div className="space-y-5 px-5 py-4">
           <FormError message={error} />
 
           <Field label="Shipper" error={err("shipperOrgId")}>
-            <Select
-              value={form.shipperOrgId}
-              onChange={(e) => set("shipperOrgId", e.target.value)}
-              required
-            >
-              {shippers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                  {s.city && s.state ? ` — ${s.city}, ${s.state}` : ""}
-                </option>
-              ))}
-            </Select>
+            {editing ? (
+              // A load belongs to its shipper; it cannot be reassigned to another.
+              <Select value={form.shipperOrgId} disabled>
+                {shippers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                    {s.city && s.state ? ` — ${s.city}, ${s.state}` : ""}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <Select
+                value={form.shipperOrgId}
+                onChange={(e) => set("shipperOrgId", e.target.value)}
+                required
+              >
+                {shippers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                    {s.city && s.state ? ` — ${s.city}, ${s.state}` : ""}
+                  </option>
+                ))}
+              </Select>
+            )}
           </Field>
 
           <fieldset>
@@ -287,19 +335,27 @@ export function LoadForm({ shippers }: { shippers: Shipper[] }) {
 
         <div className="flex items-center justify-between gap-3 border-t border-line px-5 py-3">
           <p className="text-[12px] text-ink-3">
-            The reference (LF-####) is generated by the server.
+            {editing
+              ? "Only editable while Posted or Carrier Assigned."
+              : "The reference (LF-####) is generated by the server."}
           </p>
           <div className="flex items-center gap-2">
             <Button
               type="button"
               variant="ghost"
-              onClick={() => router.push("/broker")}
+              onClick={() => router.push(editing ? `/broker/loads/${load.id}` : "/broker")}
               disabled={pending}
             >
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={pending}>
-              {pending ? "Posting…" : "Post load"}
+              {pending
+                ? editing
+                  ? "Saving…"
+                  : "Posting…"
+                : editing
+                  ? "Save changes"
+                  : "Post load"}
             </Button>
           </div>
         </div>
