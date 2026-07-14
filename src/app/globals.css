@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+/* Tailwind v4 has no tailwind.config.js — theme is CSS-first.
+   Class-based dark mode (the v3 `darkMode: 'class'` option does not exist). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Accent: amber. Freight is a liability business — the whole app exists to stop
+     you dispatching to an uninsured carrier. Amber is the language of that. */
+  --color-brand-50: oklch(98% 0.02 85);
+  --color-brand-100: oklch(95% 0.05 85);
+  --color-brand-200: oklch(90% 0.09 85);
+  --color-brand-300: oklch(84% 0.13 82);
+  --color-brand-400: oklch(78% 0.16 76);
+  --color-brand-500: oklch(72% 0.17 66);
+  --color-brand-600: oklch(64% 0.16 55);
+  --color-brand-700: oklch(53% 0.13 50);
+  --color-brand-800: oklch(43% 0.1 48);
+  --color-brand-900: oklch(35% 0.08 48);
+
+  --radius-card: 0.75rem;
+}
+
+/* Semantic surface tokens, redefined per theme. `inline` so utilities resolve the
+   inner var at use-time and therefore follow the active theme. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+}
+
+:root {
+  --bg: oklch(98.5% 0.002 250);
+  --surface: oklch(100% 0 0);
+  --surface-2: oklch(97% 0.003 250);
+  --line: oklch(92% 0.004 250);
+  --line-strong: oklch(86% 0.006 250);
+  --ink: oklch(21% 0.01 250);
+  --ink-2: oklch(45% 0.012 250);
+  --ink-3: oklch(60% 0.012 250);
+
+  --ok: oklch(52% 0.13 155);
+  --ok-soft: oklch(95% 0.04 155);
+  --warn: oklch(55% 0.13 75);
+  --warn-soft: oklch(95% 0.05 85);
+  --danger: oklch(55% 0.19 25);
+  --danger-soft: oklch(95% 0.04 25);
+  --info: oklch(55% 0.14 250);
+  --info-soft: oklch(95% 0.03 250);
+
+  color-scheme: light;
+}
+
+.dark {
+  --bg: oklch(17% 0.006 260);
+  --surface: oklch(21% 0.008 260);
+  --surface-2: oklch(25% 0.009 260);
+  --line: oklch(29% 0.01 260);
+  --line-strong: oklch(37% 0.012 260);
+  --ink: oklch(96% 0.003 260);
+  --ink-2: oklch(74% 0.008 260);
+  --ink-3: oklch(58% 0.01 260);
+
+  --ok: oklch(76% 0.15 158);
+  --ok-soft: oklch(30% 0.06 158);
+  --warn: oklch(80% 0.14 80);
+  --warn-soft: oklch(32% 0.06 75);
+  --danger: oklch(70% 0.17 22);
+  --danger-soft: oklch(31% 0.08 22);
+  --info: oklch(74% 0.13 250);
+  --info-soft: oklch(30% 0.06 255);
+
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular figures wherever numbers are compared down a column. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: var(--color-brand-500);
+  color: oklch(15% 0 0);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
