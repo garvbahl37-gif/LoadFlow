@@ -125,27 +125,49 @@ export const GET = handler(async (req: NextRequest) => {
     }),
   ]);
 
-  const loads = rows.map((load) => {
+  // A shipper is not a party to the broker↔carrier agreement, so their own board must
+  // not carry the offered rate, the confirmed-rate breakdown, or the carrier's compliance
+  // flags — the same boundary the detail route enforces via redactForShipper. Applied
+  // here too, because the list endpoint is a separate response a shipper can curl.
+  const isShipper = session.orgType === "SHIPPER";
+
+  // Sort on plain facts first (blocked freight to the top for an ops desk, then earliest
+  // pickup), so the redaction below can produce a clean union type without a sort over it.
+  const ordered = rows
+    .map((load) => ({
+      load,
+      blocked: load.complianceFlags.some((f) => f.severity === "BLOCKING"),
+    }))
+    .sort((a, b) => {
+      if (a.blocked !== b.blocked) return a.blocked ? -1 : 1;
+      return a.load.pickupAt.getTime() - b.load.pickupAt.getTime();
+    });
+
+  const loads = ordered.map(({ load, blocked }) => {
+    if (isShipper) {
+      const {
+        complianceFlags: _f,
+        confirmedRate: _cr,
+        offeredRateCents: _o,
+        confirmedRateConfirmationId: _crid,
+        _count: _c,
+        ...safe
+      } = load;
+      return { ...safe, podCount: load._count.pods };
+    }
+
     const openFlags = load.complianceFlags;
     const openBlocking = openFlags.filter((f) => f.severity === "BLOCKING").length;
-    const openWarning = openFlags.length - openBlocking;
     return {
       ...load,
       complianceFlags: undefined,
       openFlags,
       openBlocking,
-      openWarning,
-      blocked: openBlocking > 0,
+      openWarning: openFlags.length - openBlocking,
+      blocked,
       rateVersionCount: load._count.rateConfirmations,
       podCount: load._count.pods,
     };
-  });
-
-  // Blocked freight is the thing an ops desk must look at first; after that, the
-  // truck that leaves soonest.
-  loads.sort((a, b) => {
-    if (a.blocked !== b.blocked) return a.blocked ? -1 : 1;
-    return a.pickupAt.getTime() - b.pickupAt.getTime();
   });
 
   const statusCounts = Object.fromEntries(
@@ -156,7 +178,8 @@ export const GET = handler(async (req: NextRequest) => {
     loads,
     total,
     statusCounts,
-    blockedCount: loads.filter((l) => l.blocked).length,
+    // Shippers never receive `blocked`, so this is derived from the pre-redaction facts.
+    blockedCount: isShipper ? undefined : ordered.filter((o) => o.blocked).length,
     filters: { q, status: statuses, carrierOrgId, flagged, limit },
   });
 });
