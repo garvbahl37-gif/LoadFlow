@@ -220,20 +220,37 @@ export function Field({
 }
 
 const CONTROL =
-  "w-full rounded-lg border border-line-strong bg-surface px-3 text-sm text-ink " +
+  "rounded-lg border border-line-strong bg-surface px-3 text-sm text-ink " +
   "placeholder:text-ink-3 focus-visible:border-brand-500 focus-visible:outline-2 " +
   "focus-visible:outline-offset-0 focus-visible:outline-brand-500/40 disabled:opacity-50";
 
+/**
+ * Width is opt-in, not baked into CONTROL.
+ *
+ * clsx concatenates; it does NOT resolve Tailwind conflicts the way tailwind-merge would
+ * (and we deliberately don't ship tailwind-merge). So a hardcoded `w-full` in the base
+ * would sit in the class list alongside a caller's `w-44`, and the CSS cascade — not the
+ * caller — would decide the winner. `w-full` won, which meant every width passed to an
+ * Input or Select in this codebase was silently ignored. That is what turned the load
+ * board's filter toolbar into a column of full-width blocks.
+ *
+ * Default to `w-full` (right for forms), but stand down the moment the caller sets a width.
+ */
+function control(extra: string, className?: string): string {
+  const callerSetsWidth = className ? /(^|\s)(w-|min-w-|max-w-|flex-1|grow)/.test(className) : false;
+  return clsx(CONTROL, !callerSetsWidth && "w-full", extra, className);
+}
+
 export function Input({ className, ...props }: ComponentProps<"input">) {
-  return <input className={clsx(CONTROL, "h-9", className)} {...props} />;
+  return <input className={control("h-9", className)} {...props} />;
 }
 
 export function Select({ className, ...props }: ComponentProps<"select">) {
-  return <select className={clsx(CONTROL, "h-9 pr-8", className)} {...props} />;
+  return <select className={control("h-9 pr-8", className)} {...props} />;
 }
 
 export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
-  return <textarea className={clsx(CONTROL, "py-2", className)} {...props} />;
+  return <textarea className={control("py-2", className)} {...props} />;
 }
 
 /** Inline API error, shown above a form. */
