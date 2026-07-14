@@ -1,21 +1,24 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { handler, parseBody } from "@/lib/api/http";
 import { requestMeta } from "@/lib/audit/log";
-import { loadInScopeOrThrow, requireSession } from "@/lib/authz/guard";
+import { loadInScopeOrThrow, requireOrgType, requireSession } from "@/lib/authz/guard";
 import { prisma } from "@/lib/db";
 import { confirmRate, parseAccessorials, rateInputSchema } from "@/lib/rates/service";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 /**
- * Every version of the rate, newest first. Scope only — a shipper and the assigned
- * carrier are both parties to the agreement and may read its history; the scope
- * filter is what decides whether this load exists for them at all.
+ * Every version of the rate, newest first, for the two parties to the agreement — the
+ * broker and the assigned carrier. A shipper is NOT a party: the brief limits them to
+ * "their own load status and delivery confirmation", and the rate history carries the
+ * broker's margin and internal negotiation notes. Shippers are refused here (and their
+ * own page never calls this), so the boundary is enforced at the API, not just the UI.
  */
 export const GET = handler(async (req: NextRequest, ctx: Ctx) => {
   const { id } = await ctx.params;
   const meta = requestMeta(req);
   const session = await requireSession();
+  await requireOrgType(session, ["BROKER", "CARRIER"], meta);
 
   const load = await loadInScopeOrThrow(session, id, undefined, meta);
 

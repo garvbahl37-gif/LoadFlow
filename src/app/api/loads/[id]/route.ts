@@ -6,7 +6,7 @@ import { authorize, loadInScopeOrThrow, requireSession } from "@/lib/authz/guard
 import { evaluateLoad } from "@/lib/compliance/evaluator";
 import { prisma } from "@/lib/db";
 import { COMMODITY_TYPES, EQUIPMENT_TYPES } from "@/lib/format";
-import { LOAD_DETAIL_INCLUDE, factsFor, transitionsFor } from "@/lib/loads/service";
+import { LOAD_DETAIL_INCLUDE, factsFor, redactForShipper, transitionsFor } from "@/lib/loads/service";
 import { STATUS_LABEL } from "@/lib/loads/state-machine";
 
 /** Loads may only be edited while they are still negotiable. */
@@ -29,16 +29,22 @@ export const GET = handler(async (req: NextRequest, ctx: { params: Promise<{ id:
 
   const openFlags = load.complianceFlags.filter((f) => f.status === "OPEN");
 
+  // Shippers get a redacted load — no rate negotiation, no compliance flags, no offered
+  // rate. They are not a party to the broker↔carrier agreement.
+  const isShipper = session.orgType === "SHIPPER";
+  const payload = isShipper ? redactForShipper(load as unknown as Record<string, unknown>) : load;
+
   return NextResponse.json({
-    load,
+    load: payload,
     facts,
     transitions,
     // docs/API.md names this `availableTransitions`; the module brief names it
     // `transitions`. Both keys are returned, identical, so neither consumer breaks.
     availableTransitions: transitions,
-    blocked: facts.openBlockingFlags > 0,
-    openBlocking: facts.openBlockingFlags,
-    openWarning: openFlags.filter((f) => f.severity === "WARNING").length,
+    // A shipper is never shown compliance internals, so these counts are suppressed too.
+    blocked: isShipper ? undefined : facts.openBlockingFlags > 0,
+    openBlocking: isShipper ? undefined : facts.openBlockingFlags,
+    openWarning: isShipper ? undefined : openFlags.filter((f) => f.severity === "WARNING").length,
   });
 });
 
