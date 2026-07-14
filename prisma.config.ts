@@ -38,9 +38,15 @@ export default defineConfig({
     // Avoid Supabase's "Direct connection" (db.<ref>.supabase.co): it is IPv6-only unless
     // you buy the IPv4 add-on, and it will fail from most networks and CI. Use the
     // SESSION-mode pooler on 5432, which is IPv4 and supports DDL.
+    // The fallback is not decoration — it is what makes `git clone && npm install &&
+    // npm run setup` work with ZERO configuration. A fresh clone has no .env (it is
+    // gitignored, and rightly so), so without this default every Prisma CLI command dies
+    // with "The datasource.url property is required in your Prisma config file" — on the
+    // reviewer's very first command. src/lib/db.ts defaults to the same path at runtime.
     url:
       process.env["DIRECT_URL"] ??
       process.env["DIRECT_DATABASE_URL"] ??
-      process.env["DATABASE_URL"],
+      process.env["DATABASE_URL"] ??
+      "file:./prisma/dev.db",
   },
 });
