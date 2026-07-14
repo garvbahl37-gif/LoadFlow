@@ -120,14 +120,14 @@ export function AlertsStrip({ blockedLoads }: { blockedLoads: BlockedLoad[] }) {
             {alert.affectedLoads > 0 ? (
               <Link
                 href={`/broker?carrierOrgId=${alert.carrierOrgId}`}
-                className="rounded-lg border border-danger/40 px-2.5 py-1 text-[12px] font-medium text-danger hover:bg-danger/10"
+                className="rounded-lg border border-danger/40 px-2.5 py-1 text-[12px] font-medium text-danger transition-transform duration-75 hover:bg-danger/10 active:scale-95"
               >
                 See the freight
               </Link>
             ) : null}
             <Link
               href="/broker/carriers"
-              className="rounded-lg bg-danger px-2.5 py-1 text-[12px] font-medium text-white hover:opacity-90"
+              className="rounded-lg bg-danger px-2.5 py-1 text-[12px] font-medium text-white transition-transform duration-75 hover:opacity-90 active:scale-95"
             >
               Fix compliance
             </Link>

@@ -11,10 +11,13 @@ import { STATUS_LABEL } from "@/lib/loads/state-machine";
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 type ButtonSize = "sm" | "md";
 
+// `active:scale-[.97]` gives an instant tactile press response even before any
+// navigation or fetch resolves — the click always *feels* registered.
 const BUTTON_BASE =
-  "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-colors " +
+  "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium " +
+  "transition-[color,background-color,border-color,transform] duration-75 active:scale-[.97] " +
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 " +
-  "disabled:cursor-not-allowed disabled:opacity-45";
+  "disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100";
 
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
   primary: "bg-brand-500 text-[oklch(20%_0_0)] hover:bg-brand-400 active:bg-brand-600",
@@ -29,17 +32,42 @@ const BUTTON_SIZE: Record<ButtonSize, string> = {
   md: "h-9 px-3.5 text-sm",
 };
 
+export function buttonClass(variant: ButtonVariant = "secondary", size: ButtonSize = "md", className?: string) {
+  return clsx(BUTTON_BASE, BUTTON_VARIANT[variant], BUTTON_SIZE[size], className);
+}
+
+/** A small spinner used to signal in-flight work on buttons. */
+export function Spinner({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={clsx(
+        "inline-block h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-current border-t-transparent",
+        className,
+      )}
+    />
+  );
+}
+
 export function Button({
   variant = "secondary",
   size = "md",
   className,
+  loading,
+  children,
+  disabled,
   ...props
-}: ComponentProps<"button"> & { variant?: ButtonVariant; size?: ButtonSize }) {
+}: ComponentProps<"button"> & { variant?: ButtonVariant; size?: ButtonSize; loading?: boolean }) {
   return (
     <button
-      className={clsx(BUTTON_BASE, BUTTON_VARIANT[variant], BUTTON_SIZE[size], className)}
+      className={buttonClass(variant, size, className)}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
       {...props}
-    />
+    >
+      {loading ? <Spinner /> : null}
+      {children}
+    </button>
   );
 }
 

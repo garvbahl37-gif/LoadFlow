@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@/generated/prisma/client";
 import type { LoadStatus } from "@/generated/prisma/enums";
+import { LinkButton } from "@/components/link-button";
 import { AlertsStrip } from "@/components/loads/alerts-strip";
 import { BoardFilters } from "@/components/loads/board-filters";
 import {
@@ -150,9 +151,9 @@ export default async function BrokerBoardPage({
         subtitle={`${session.orgName} · every action below is re-authorized server-side`}
         action={
           canCreate ? (
-            <Link href="/broker/loads/new">
-              <Button variant="primary">+ Post a load</Button>
-            </Link>
+            <LinkButton href="/broker/loads/new" variant="primary" prefetch>
+              + Post a load
+            </LinkButton>
           ) : (
             <LockedHint>
               Posting a load requires the{" "}
