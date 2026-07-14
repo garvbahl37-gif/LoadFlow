@@ -23,13 +23,24 @@ export default defineConfig({
     seed: "tsx prisma/seed.ts",
   },
   datasource: {
-    // This URL is used by the CLI — i.e. by MIGRATIONS. The running app does not read it;
+    // This URL is used by the CLI — i.e. by MIGRATIONS. The running app never reads it;
     // it builds its own adapter from DATABASE_URL in src/lib/db.ts.
     //
-    // That distinction matters on Supabase (and Neon). Their pooled connection runs
-    // through pgbouncer in transaction mode, which cannot run DDL or prepared statements,
-    // so `migrate deploy` against the pooled port fails. Point DIRECT_DATABASE_URL at the
-    // direct port (5432) for migrations, and let the serverless runtime use the pooled one.
-    url: process.env["DIRECT_DATABASE_URL"] ?? process.env["DATABASE_URL"],
+    // That distinction matters on Supabase and Neon. Their TRANSACTION-mode pooler
+    // (port 6543) is what serverless functions should use, but it cannot execute DDL or
+    // prepared statements — so `migrate deploy` against it fails. Migrations must go
+    // through a session-mode or direct connection (port 5432) instead.
+    //
+    // `DIRECT_URL` is the name Supabase itself puts in the connection strings it hands
+    // you; DIRECT_DATABASE_URL is accepted too so neither name is a trap. If neither is
+    // set (e.g. local SQLite), migrations just use DATABASE_URL.
+    //
+    // Avoid Supabase's "Direct connection" (db.<ref>.supabase.co): it is IPv6-only unless
+    // you buy the IPv4 add-on, and it will fail from most networks and CI. Use the
+    // SESSION-mode pooler on 5432, which is IPv4 and supports DDL.
+    url:
+      process.env["DIRECT_URL"] ??
+      process.env["DIRECT_DATABASE_URL"] ??
+      process.env["DATABASE_URL"],
   },
 });

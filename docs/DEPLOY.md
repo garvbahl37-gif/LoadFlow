@@ -52,8 +52,21 @@ Supabase → **New project**. Then **Project Settings → Database → Connectio
 | Variable | Value |
 |---|---|
 | `DATABASE_PROVIDER` | `postgresql` |
-| `DATABASE_URL` | the **pooled** string, port `6543`, with `?pgbouncer=true` |
-| `DIRECT_DATABASE_URL` | the **direct** string, port `5432` |
+| `DATABASE_URL` | the **Transaction pooler** string, port `6543`, with `?pgbouncer=true` |
+| `DIRECT_URL` | the **Session pooler** string, port `5432` |
+
+Three traps here, all of which cost real time if you hit them blind:
+
+* **Do not use Supabase's "Direct connection"** (`db.<ref>.supabase.co:5432`). It is
+  **IPv6-only** unless you buy the IPv4 add-on, so `migrate deploy` fails from most
+  networks and from Vercel's build machines with a misleading "can't reach database
+  server". Use the **Session pooler** (`...pooler.supabase.com:5432`) instead: it is
+  IPv4 and, being session-mode, it can run DDL.
+* **Do not point migrations at the Transaction pooler** (`:6543`). Transaction-mode
+  pgbouncer cannot execute DDL or prepared statements. It is correct for the *running*
+  app and wrong for migrations, which is exactly why these are two variables.
+* **Percent-encode special characters in the password.** An `@` in the password must be
+  written `%40`, or the URL parses the password as part of the hostname.
 
 That is the complete list. There is no session secret (sessions are database rows, not signed tokens) and no storage credential (POD documents live in the database).
 
@@ -70,8 +83,29 @@ vercel-build:  prisma generate && prisma migrate deploy && next build
 ```bash
 npm i -g vercel
 vercel link
-vercel --prod
+vercel deploy --prod
 ```
+
+### 3a. Turn OFF Vercel Authentication — or nobody can see it
+
+New Vercel projects ship with **Deployment Protection** on, which puts the whole
+deployment behind Vercel's SSO. The site returns HTTP 200, so it *looks* deployed — but
+what is being served is a Vercel login page, and every API call comes back
+`401 {"protection":{"vercel_auth_enabled":true}}`.
+
+There is no CLI command for this. In the dashboard:
+
+**Project → Settings → Deployment Protection → Vercel Authentication → Disabled → Save**
+
+Then confirm it is genuinely public, from outside your session:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://<your-app>.vercel.app/login   # expect 200
+BASE_URL=https://<your-app>.vercel.app npx tsx scripts/rbac-proof.ts --no-seed  # expect 24/24
+```
+
+Running the RBAC proof against the live URL is the only thing that proves the deployment
+actually *enforces* everything, rather than merely rendering.
 
 ### 4. Seed it once
 
