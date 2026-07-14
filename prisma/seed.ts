@@ -138,6 +138,10 @@ async function main() {
     ["load.create", "load.assign_carrier", "rate.confirm", "load.update_status"],
   );
 
+  // Exactly a Dispatcher plus one permission — the authority to override a compliance
+  // flag. That single difference is the entire compliance-override story, and it matches
+  // the brief's own example ("Ops Lead (+ override)"). Kept deliberately to exactly one
+  // extra permission so the demo's "same role, one more capability" claim is literally true.
   const opsLeadRole = await makeRole(
     broker.id,
     "Ops Lead",
@@ -148,8 +152,6 @@ async function main() {
       "rate.confirm",
       "load.update_status",
       "load.override_compliance_flag",
-      "compliance.manage",
-      "audit.view",
     ],
   );
 

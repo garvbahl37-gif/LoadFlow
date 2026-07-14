@@ -12,6 +12,12 @@ Everything else in the app exists to make that guarantee credible.
 
 ---
 
+## Live demo
+
+**https://loadflow-garvbahl37-gifs-projects.vercel.app** — every password is `loadflow`; the login page fills the form for you in one click.
+
+Or run it locally in under a minute (below).
+
 ## Run it
 
 Requires **Node 20+**. No database server, no Docker, no API keys.
@@ -152,7 +158,7 @@ Honestly:
 * **No CSRF token.** Mutations are JSON-only (which a cross-site form cannot produce) and the session cookie is `SameSite=Lax`, so the JSON endpoints are already immune. The one exception — the `multipart/form-data` POD upload — is protected by an explicit `Sec-Fetch-Site`/`Origin` check. A production build should still use a proper double-submit token rather than relying on that reasoning.
 * **No rate limiting on login.** Failed logins *are* audited, but nothing throttles them.
 * **No pagination on the load board.** Fine at demo scale; it would fall over at 10,000 loads. The audit log does paginate.
-* **Deployment is local.** SQLite on a filesystem doesn't survive a serverless platform's ephemeral disk. To ship it I'd point the Prisma datasource at Postgres — or Turso/libSQL to keep the SQLite dialect — which the driver-adapter architecture makes a config change rather than a rewrite, and move POD bytes to object storage.
+* **POD bytes live in the database.** Fine for a portable demo (no blob store to stand up), but for real scale they belong in object storage with the DB holding only a reference. On the deployed Postgres they sit in a `BYTEA` column, which works but is not where multi-megabyte files should live long-term.
 * **Compliance re-evaluation is synchronous.** Editing a carrier with hundreds of live loads re-evaluates them all inside the request. That belongs in a job queue.
 * **Tests cover the logic and the API boundary, not the UI.** 29 unit tests and 24 HTTP assertions. There are no component or browser tests; I drove the UI manually across every persona instead.
 
